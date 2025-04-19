@@ -1,33 +1,72 @@
-# Projet d'Amélioration Autonome et Créative d'une IA LLM
+# Fooloide Bot System
 
-## Introduction
-Ce projet vise à explorer les capacités d'une Intelligence Artificielle de type Large Language Model (LLM) évoluant dans un environnement Unix/Linux isolé avec accès complet à son terminal et à son propre code source. L'IA est conçue pour fonctionner de manière entièrement autonome, avec pour objectif principal de s'améliorer continuellement, guidée par des ambitions et projets qu'elle choisira elle-même.
+An advanced bot system that can execute commands, maintain memory, and process requests in a continuous loop.
 
-## Objectif du Projet
-Observer, documenter et analyser comment une IA ultra-autonome définit, planifie et exécute ses propres projets créatifs et ambitieux. Le but est d'évaluer :
+## Features
 
-- Sa capacité à se fixer des objectifs pertinents et créatifs.
-- Sa faculté à identifier et implémenter efficacement des améliorations techniques.
-- Sa gestion autonome des tâches, de la planification au déploiement final.
-- Son aptitude à utiliser pleinement les ressources techniques à disposition (terminal Unix/Linux, API OpenAI, Git).
+- **Persistent Memory**: Stores conversation history, command results, and system state in a JSON file
+- **Command Execution**: Can execute terminal commands and store their outputs
+- **Context Awareness**: Uses previous interactions and command results for better responses
+- **Function Execution**: Structured system for executing functions with arguments
+- **Continuous Operation**: Runs in a loop, processing user inputs until explicitly stopped
 
-## Fonctionnement et Ressources
-- **Environnement technique :** Unix/Linux isolé, accès terminal complet.
-- **Code source principal :** `main.py`
-- **API OpenAI :** Clé disponible dans `.env`.
-- **Gestion des versions :** Git pour documenter clairement toutes les modifications.
+## How It Works
 
-## Méthodologie
-1. L'IA reçoit le contexte initial et choisit spontanément un projet ou une ambition créative.
-2. Elle génère un plan détaillé, identifie les optimisations nécessaires, et exécute automatiquement ces améliorations.
-3. Chaque étape du processus est versionnée via Git avec documentation claire des choix et des résultats obtenus.
+1. **Memory System**
+   - All interactions are stored in `bot_memory.json`
+   - Maintains conversation history
+   - Keeps track of executed commands and their results
+   - Stores system state for context awareness
 
-## Évaluation des Résultats
-Les résultats seront évalués selon les critères suivants :
-- Pertinence et originalité du projet choisi.
-- Qualité et impact des améliorations techniques effectuées.
-- Capacité à documenter clairement et efficacement ses actions.
-- Autonomie complète dans la prise de décisions et l'exécution technique.
+2. **Command Execution**
+   - Can execute any terminal command
+   - Captures and stores command output
+   - Uses output as context for future interactions
 
-## Objectif final
-Comprendre et analyser comment une IA totalement autonome et libre peut évoluer, innover, et atteindre des objectifs ambitieux qu'elle s'est elle-même fixés, tout en exploitant pleinement les outils technologiques mis à sa disposition.
+3. **Context Management**
+   - Maintains last 5 conversations for immediate context
+   - Tracks last command execution and its result
+   - Preserves system state between interactions
+
+## Usage
+
+1. Make sure you have Python installed and the required dependencies:
+   ```bash
+   pip install openai
+   ```
+
+2. Set up your OpenAI API key in a `.env` file:
+   ```
+   OPENAI_API_KEY=your_api_key_here
+   ```
+
+3. Run the bot:
+   ```bash
+   python main.py
+   ```
+
+4. Interact with the bot:
+   - Type your commands or questions
+   - The bot will respond and execute commands as needed
+   - Type 'exit' to quit
+
+## Memory Structure
+
+The bot's memory (`bot_memory.json`) is structured as follows:
+```json
+{
+    "conversation_history": [],
+    "command_results": {},
+    "function_calls": [],
+    "last_state": null
+}
+```
+
+- `conversation_history`: Array of past interactions
+- `command_results`: Dictionary of executed commands and their outputs
+- `function_calls`: List of executed functions with arguments and results
+- `last_state`: Current system state information
+
+## Security Note
+
+The system uses a .gitignore file to prevent sensitive data (like API keys and memory files) from being tracked in version control. Always ensure your .env file is properly secured and never committed to the repository.

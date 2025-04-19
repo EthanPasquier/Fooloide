@@ -1,0 +1,9 @@
+{
+  "conversation_history": [],
+  "command_results": {},
+  "function_calls": [],
+  "last_state": {
+    "last_function": null,
+    "last_output": ""
+  }
+}
