@@ -28,22 +28,43 @@ class BotSystem:
 
     def load_memory(self):
         """Load bot's memory from file or create new if doesn't exist"""
+        self.memory = {
+            'conversation_history': [],
+            'function_calls': [],
+            'last_state': None
+        }
+        
         if os.path.exists(self.memory_file):
-            with open(self.memory_file, 'r') as f:
-                self.memory = json.load(f)
-        else:
-            self.memory = {
-                'conversation_history': [],
-                'command_results': {},
-                'function_calls': [],
-                'last_state': None
-            }
-            self.save_memory()
+            try:
+                with open(self.memory_file, 'r') as f:
+                    loaded_memory = json.load(f)
+                    # Verify the loaded memory has all required keys
+                    if all(key in loaded_memory for key in self.memory.keys()):
+                        self.memory = loaded_memory
+            except (json.JSONDecodeError, Exception) as e:
+                print(f"Error loading memory file: {e}")
+                print("Using fresh memory state")
+        
+        self.save_memory()
 
     def save_memory(self):
         """Save bot's memory to file"""
-        with open(self.memory_file, 'w') as f:
-            json.dump(self.memory, f, indent=2)
+        try:
+            # First write to a temporary file
+            temp_file = f"{self.memory_file}.tmp"
+            with open(temp_file, 'w') as f:
+                json.dump(self.memory, f, indent=2)
+            
+            # Then rename it to the actual file (atomic operation)
+            os.replace(temp_file, self.memory_file)
+        except Exception as e:
+            print(f"Error saving memory file: {e}")
+            # If saving fails, ensure temp file is cleaned up
+            if os.path.exists(temp_file):
+                try:
+                    os.remove(temp_file)
+                except:
+                    pass
 
     def execute_command(self, command: str) -> str:
         """Execute a terminal command and return its output"""
@@ -56,17 +77,17 @@ class BotSystem:
             )
             output = result.stdout if result.stdout else result.stderr
             
-            # Store command and its result in memory
-            timestamp = datetime.now().isoformat()
-            self.memory['command_results'][timestamp] = {
-                'command': command,
-                'output': output
-            }
-            self.save_memory()
-            
             return output
         except Exception as e:
-            return f"Error executing command: {str(e)}"
+            error_msg = f"Error executing command: {str(e)}"
+            # Store error in conversation history
+            self.memory['conversation_history'].append({
+                'role': 'assistant',
+                'content': f"Command failed: {command}\nError: {error_msg}",
+                'timestamp': datetime.now().isoformat()
+            })
+            self.save_memory()
+            return error_msg
 
     def process_request(self, user_input: str) -> str:
         """Process user input and generate response"""
@@ -77,23 +98,28 @@ class BotSystem:
             'timestamp': datetime.now().isoformat()
         })
 
-        # Create system message with context from memory
-        system_context = {
-            'last_command_result': self.memory['command_results'].get(max(self.memory['command_results'].keys())) if self.memory['command_results'] else None,
-            'conversation_history': self.memory['conversation_history'][-5:],  # Last 5 conversations
-            'last_state': self.memory['last_state']
-        }
-
         # Get response from OpenAI
+        # Prepare messages array with system prompt and conversation history
+        messages = [
+            {
+                "role": "system",
+                "content": SYSTEM_PROMPT
+            }
+        ]
+        
+        # Add last 50 messages from conversation history
+        if self.memory['conversation_history']:
+            # Get last 50 messages
+            recent_history = self.memory['conversation_history'][-50:]
+            for msg in recent_history:
+                messages.append({
+                    "role": msg['role'],
+                    "content": msg['content']
+                })
+        
         response = self.client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {
-                    "role": "system",
-                    "content": f"{SYSTEM_PROMPT}\nContext actuel: {json.dumps(system_context)}"
-                },
-                {"role": "user", "content": user_input}
-            ],
+            model="gpt-4o-mini",
+            messages=messages,
             functions=[
                 {
                     "name": "execute_command",
@@ -136,6 +162,13 @@ class BotSystem:
                     'last_function': func_name,
                     'last_output': command_output
                 }
+                
+                # Store command execution in conversation history
+                self.memory['conversation_history'].append({
+                    'role': 'assistant',
+                    'content': f"Executing command: {func_args['command']}\nOutput: {command_output}",
+                    'timestamp': datetime.now().isoformat()
+                })
                 
                 self.save_memory()
                 return f"Command executed. Output:\n{command_output}"
@@ -180,7 +213,9 @@ def main():
         clear_terminal()
         
         # Get bot response
-        current_input = "Start" if not bot.memory['last_state'] else bot.memory['last_state']['last_output']
+        current_input = "Start"
+        if bot.memory['last_state'] and isinstance(bot.memory['last_state'], dict) and 'last_output' in bot.memory['last_state']:
+            current_input = bot.memory['last_state']['last_output']
         print(f"\n{YELLOW}Current Input:{RESET}\n{current_input}")
         
         response = bot.process_request(current_input)
@@ -190,13 +225,18 @@ def main():
         print("==================")
         
         # Show the message/response
-        if "Command executed. Output:" in response:
-            # For command executions, show the command and its output
-            last_command = bot.memory['function_calls'][-1]
-            message = bot.memory['conversation_history'][-2]['content']  # Get the bot's message before command
-            print(f"\n{YELLOW}Message:{RESET}\n{message}")
-            print(f"\n{BLUE}Bash Command:{RESET}\n{last_command['arguments']['command']}")
-            print(f"\n{PURPLE}Command Output:{RESET}\n{last_command['result']}")
+        if "Command executed. Output:" in response and bot.memory['function_calls']:
+            try:
+                # For command executions, show the command and its output
+                last_command = bot.memory['function_calls'][-1]
+                # Safely get the bot's message before command
+                if len(bot.memory['conversation_history']) >= 2:
+                    message = bot.memory['conversation_history'][-2]['content']
+                    print(f"\n{YELLOW}Message:{RESET}\n{message}")
+                print(f"\n{BLUE}Bash Command:{RESET}\n{last_command['arguments']['command']}")
+                print(f"\n{PURPLE}Command Output:{RESET}\n{last_command['result']}")
+            except (IndexError, KeyError) as e:
+                print(f"\n{YELLOW}Error displaying command details: {e}{RESET}")
         else:
             # For regular responses, show the response
             print(f"\n{YELLOW}Message:{RESET}\n{response}")
